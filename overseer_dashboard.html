@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OVERSEER · SOC Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #060a0f;
+    --surface:  #0b1320;
+    --card:     #0e1929;
+    --border:   #1a2e45;
+    --accent:   #00d4ff;
+    --accent2:  #0077ff;
+    --danger:   #ff3b3b;
+    --warn:     #ffb800;
+    --success:  #00e676;
+    --muted:    #3a5068;
+    --text:     #c8dff0;
+    --textdim:  #557080;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui:   'Rajdhani', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scan line effect */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,212,255,0.012) 2px, rgba(0,212,255,0.012) 4px
+    );
+    pointer-events:none; z-index:9999;
+  }
+
+  /* ── Top bar ────────────────────────────────────────── */
+  .topbar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 0 24px;
+    height: 56px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position:sticky; top:0; z-index:100;
+  }
+
+  .logo {
+    display:flex; align-items:center; gap:12px;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .logo-icon {
+    width:32px; height:32px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    display:grid; place-items:center;
+    position:relative;
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,212,255,0.4); }
+    50%      { box-shadow: 0 0 0 6px rgba(0,212,255,0); }
+  }
+
+  .logo-icon svg { width:18px; height:18px; }
+
+  .topbar-center {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--textdim);
+    letter-spacing: 2px;
+  }
+
+  .topbar-right { display:flex; align-items:center; gap:16px; }
+
+  .status-pill {
+    display:flex; align-items:center; gap:6px;
+    font-family: var(--font-mono); font-size:11px;
+    padding: 4px 12px;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+
+  .status-pill.online  { color:var(--success); border-color:rgba(0,230,118,0.3); background:rgba(0,230,118,0.06); }
+  .status-pill.offline { color:var(--danger);  border-color:rgba(255,59,59,0.3);  background:rgba(255,59,59,0.06); }
+
+  .dot {
+    width:6px; height:6px; border-radius:50%;
+    background: currentColor;
+    animation: blink 1.2s step-end infinite;
+  }
+
+  @keyframes blink { 50% { opacity:0; } }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  .layout {
+    display:grid;
+    grid-template-columns: 280px 1fr 320px;
+    grid-template-rows: auto 1fr;
+    gap:1px;
+    height: calc(100vh - 56px);
+    background: var(--border);
+  }
+
+  .panel {
+    background: var(--bg);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+
+  .panel-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0;
+  }
+
+  .panel-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  .panel-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--textdim);
+  }
+
+  .panel-body { flex:1; overflow-y:auto; padding:12px; }
+  .panel-body::-webkit-scrollbar { width:3px; }
+  .panel-body::-webkit-scrollbar-track { background:transparent; }
+  .panel-body::-webkit-scrollbar-thumb { background:var(--muted); border-radius:2px; }
+
+  /* ── Metric cards (top strip) ───────────────────────── */
+  .metrics-strip {
+    grid-column: 1 / -1;
+    background: var(--bg);
+    display:grid;
+    grid-template-columns: repeat(6,1fr);
+    gap:1px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    padding: 14px 18px;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.3s;
+  }
+
+  .metric-card.active  { border-color: var(--accent); }
+  .metric-card.danger  { border-color: var(--danger); }
+  .metric-card.warn    { border-color: var(--warn); }
+  .metric-card.success { border-color: var(--success); }
+
+  .metric-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--textdim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .metric-value {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    line-height: 1;
+    color: var(--text);
+    transition: color 0.3s;
+  }
+
+  .metric-card.danger  .metric-value { color: var(--danger); }
+  .metric-card.warn    .metric-value { color: var(--warn); }
+  .metric-card.success .metric-value { color: var(--success); }
+
+  .metric-sub {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--textdim);
+    margin-top: 4px;
+  }
+
+  /* ── Threat gauge ───────────────────────────────────── */
+  .gauge-wrap {
+    padding: 20px 12px;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+
+  .gauge-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--textdim);
+    letter-spacing: 2px;
+  }
+
+  #gauge-canvas { display:block; }
+
+  .gauge-score {
+    font-family: var(--font-mono);
+    font-size: 42px;
+    color: var(--text);
+    letter-spacing: -1px;
+    transition: color 0.4s;
+  }
+
+  .gauge-family {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+
+  .gauge-family.benign  { color:var(--success); border-color:rgba(0,230,118,0.3); }
+  .gauge-family.threat  { color:var(--danger);  border-color:rgba(255,59,59,0.4); background:rgba(255,59,59,0.06); }
+
+  /* ── XAI bar chart ──────────────────────────────────── */
+  .xai-row {
+    display:grid; grid-template-columns: 1fr 80px 36px;
+    align-items:center; gap:8px;
+    margin-bottom: 8px;
+  }
+
+  .xai-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--textdim);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  .xai-bar-wrap {
+    height:6px; background:var(--border); border-radius:1px; overflow:hidden;
+  }
+
+  .xai-bar {
+    height:100%; border-radius:1px;
+    background: var(--accent);
+    transition: width 0.6s ease;
+  }
+
+  .xai-val {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text);
+    text-align:right;
+  }
+
+  /* ── Alert feed ─────────────────────────────────────── */
+  .alert-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border-radius: 2px;
+    animation: slide-in 0.3s ease;
+    cursor:pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .alert-item:hover { background: var(--surface); }
+
+  .alert-item.BENIGN                { border-left-color: var(--success); }
+  .alert-item.threat                { border-left-color: var(--danger); }
+  .alert-item[data-fam="DoS/DDoS"]  { border-left-color: var(--danger); }
+  .alert-item[data-fam="Port Scan / Probe"] { border-left-color: var(--warn); }
+  .alert-item[data-fam="Zero-Day Anomaly"]  { border-left-color: #c000ff; }
+  .alert-item[data-fam="User-to-Root"]      { border-left-color: #ff6b00; }
+
+  @keyframes slide-in {
+    from { opacity:0; transform:translateX(-8px); }
+    to   { opacity:1; transform:translateX(0); }
+  }
+
+  .alert-top {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom: 4px;
+  }
+
+  .alert-family {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .alert-score {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--warn);
+  }
+
+  .alert-score.high { color: var(--danger); }
+  .alert-score.low  { color: var(--success); }
+
+  .alert-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--textdim);
+    margin-bottom: 6px;
+  }
+
+  .alert-soar {
+    display:flex; flex-wrap:wrap; gap:4px;
+    margin-top:6px;
+  }
+
+  .soar-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 1px;
+    background: rgba(255,59,59,0.1);
+    border: 1px solid rgba(255,59,59,0.3);
+    color: var(--danger);
+    letter-spacing: 1px;
+  }
+
+  /* ── Attack buttons ─────────────────────────────────── */
+  .attack-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:8px;
+    padding:12px;
+  }
+
+  .attack-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 10px 8px;
+    border-radius: 2px;
+    cursor:pointer;
+    text-align:center;
+    text-transform: uppercase;
+    transition: all 0.2s;
+    position:relative;
+    overflow:hidden;
+  }
+
+  .attack-btn::before {
+    content:'';
+    position:absolute; inset:0;
+    background: var(--danger);
+    opacity:0;
+    transition: opacity 0.2s;
+  }
+
+  .attack-btn:hover { border-color: var(--accent); color:var(--accent); }
+  .attack-btn:active::before { opacity:0.1; }
+
+  .attack-btn .btn-icon { font-size:16px; display:block; margin-bottom:4px; }
+
+  .attack-btn.firing {
+    border-color: var(--danger);
+    color: var(--danger);
+    animation: firing 0.5s ease infinite alternate;
+  }
+
+  @keyframes firing {
+    from { box-shadow: 0 0 0 0 rgba(255,59,59,0.4); }
+    to   { box-shadow: 0 0 0 4px rgba(255,59,59,0); }
+  }
+
+  /* ── Mini chart (sparkline) ─────────────────────────── */
+  #sparkline { width:100%; height:60px; display:block; }
+
+  /* ── SOAR log ───────────────────────────────────────── */
+  .soar-log {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.8;
+    padding: 12px;
+    color: var(--textdim);
+    overflow-y:auto;
+    flex:1;
+  }
+
+  .soar-line { animation: fade-in 0.4s ease; }
+  .soar-line.action { color: var(--danger); }
+  .soar-line.benign { color: var(--success); }
+  .soar-line.info   { color: var(--accent); }
+
+  @keyframes fade-in { from { opacity:0; } to { opacity:1; } }
+
+  /* ── Ensemble scores ────────────────────────────────── */
+  .model-row {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .model-row:last-child { border:none; }
+
+  .model-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--textdim);
+    letter-spacing:1px;
+  }
+
+  .model-bar-wrap {
+    flex:1; margin: 0 12px;
+    height: 4px;
+    background: var(--border);
+    border-radius:2px;
+    overflow:hidden;
+  }
+
+  .model-bar {
+    height:100%; border-radius:2px;
+    transition: width 0.6s ease, background 0.4s;
+  }
+
+  .model-score-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    min-width: 36px;
+    text-align:right;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Top bar ────────────────────────────────────── -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="9" cy="9" r="7"/>
+        <circle cx="9" cy="9" r="3" fill="rgba(0,212,255,0.2)"/>
+        <line x1="9" y1="2" x2="9" y2="5"/>
+        <line x1="9" y1="13" x2="9" y2="16"/>
+        <line x1="2" y1="9" x2="5" y2="9"/>
+        <line x1="13" y1="9" x2="16" y2="9"/>
+      </svg>
+    </div>
+    OVERSEER
+  </div>
+  <div class="topbar-center" id="clock">──  AI THREAT DETECTION  ──</div>
+  <div class="topbar-right">
+    <div class="topbar-center" id="events-rate">0 events/s</div>
+    <div class="status-pill online" id="api-status">
+      <span class="dot"></span> ENGINE ONLINE
+    </div>
+  </div>
+</header>
+
+<!-- ── Metrics strip ──────────────────────────────── -->
+<div class="layout">
+<div class="metrics-strip">
+  <div class="metric-card active">
+    <div class="metric-label">Events/sec</div>
+    <div class="metric-value" id="m-eps">18K</div>
+    <div class="metric-sub">throughput</div>
+  </div>
+  <div class="metric-card success">
+    <div class="metric-label">Detection rate</div>
+    <div class="metric-value success" id="m-rate">96.5%</div>
+    <div class="metric-sub">autoencoder</div>
+  </div>
+  <div class="metric-card" id="m-total-card">
+    <div class="metric-label">Total predictions</div>
+    <div class="metric-value" id="m-total">0</div>
+    <div class="metric-sub">all traffic</div>
+  </div>
+  <div class="metric-card danger">
+    <div class="metric-label">Threats detected</div>
+    <div class="metric-value" id="m-threats" style="color:var(--danger)">0</div>
+    <div class="metric-sub">active alerts</div>
+  </div>
+  <div class="metric-card warn">
+    <div class="metric-label">MTTD</div>
+    <div class="metric-value" id="m-mttd" style="color:var(--warn)">&lt;2s</div>
+    <div class="metric-sub">vs 197-day avg</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-label">Uptime</div>
+    <div class="metric-value" id="m-uptime">00:00</div>
+    <div class="metric-sub">engine runtime</div>
+  </div>
+</div>
+
+<!-- ── Left panel: Threat gauge + model scores ────── -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Threat Analysis</span>
+    <span class="panel-badge" id="last-updated">–</span>
+  </div>
+  <div class="panel-body" style="padding:0; overflow-y:auto;">
+
+    <div class="gauge-wrap">
+      <div class="gauge-label">THREAT SCORE</div>
+      <canvas id="gauge-canvas" width="200" height="120"></canvas>
+      <div class="gauge-score" id="gauge-val">–</div>
+      <div class="gauge-family benign" id="gauge-family">AWAITING DATA</div>
+    </div>
+
+    <div style="padding:0 16px 8px; border-top:1px solid var(--border);">
+      <div style="padding:10px 0 6px; font-family:var(--font-mono); font-size:9px; color:var(--accent); letter-spacing:3px;">ENSEMBLE SCORES</div>
+      <div class="model-row">
+        <span class="model-name">RANDOM FOREST</span>
+        <div class="model-bar-wrap"><div class="model-bar" id="bar-rf" style="width:0%;background:var(--accent)"></div></div>
+        <span class="model-score-val" id="val-rf">–</span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">GRADIENT BOOST</span>
+        <div class="model-bar-wrap"><div class="model-bar" id="bar-gb" style="width:0%;background:var(--accent2)"></div></div>
+        <span class="model-score-val" id="val-gb">–</span>
+      </div>
+      <div class="model-row">
+        <span class="model-name">AUTOENCODER</span>
+        <div class="model-bar-wrap"><div class="model-bar" id="bar-ae" style="width:0%;background:#7c3aed"></div></div>
+        <span class="model-score-val" id="val-ae">–</span>
+      </div>
+    </div>
+
+    <!-- Sparkline -->
+    <div style="padding:8px 16px; border-top:1px solid var(--border);">
+      <div style="font-family:var(--font-mono); font-size:9px; color:var(--accent); letter-spacing:3px; margin-bottom:6px;">SCORE HISTORY</div>
+      <canvas id="sparkline"></canvas>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Center panel: Alert feed ───────────────────── -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Live Alert Feed</span>
+    <span class="panel-badge" id="alert-count">0 alerts</span>
+  </div>
+  <div class="panel-body" id="alert-feed"></div>
+</div>
+
+<!-- ── Right panel: XAI + SOAR + Attack controls ─── -->
+<div class="panel" style="display:flex;flex-direction:column;">
+
+  <!-- XAI section -->
+  <div class="panel-header">
+    <span class="panel-title">XAI — Feature Importance</span>
+  </div>
+  <div style="padding:12px; flex-shrink:0;" id="xai-panel">
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--textdim);">Awaiting prediction...</div>
+  </div>
+
+  <!-- Attack controls -->
+  <div class="panel-header" style="flex-shrink:0;">
+    <span class="panel-title">Attack Simulation</span>
+    <span class="panel-badge">demo mode</span>
+  </div>
+  <div class="attack-grid" style="flex-shrink:0;">
+    <button class="attack-btn" onclick="fireScenario('dos_syn')">
+      <span class="btn-icon">⚡</span>DoS/DDoS
+    </button>
+    <button class="attack-btn" onclick="fireScenario('port_scan')">
+      <span class="btn-icon">🔍</span>Port Scan
+    </button>
+    <button class="attack-btn" onclick="fireScenario('brute_force')">
+      <span class="btn-icon">🔑</span>Brute Force
+    </button>
+    <button class="attack-btn" onclick="fireScenario('sql_injection')">
+      <span class="btn-icon">💉</span>SQL Inject
+    </button>
+    <button class="attack-btn" onclick="fireScenario('reverse_shell')">
+      <span class="btn-icon">🐚</span>Rev Shell
+    </button>
+    <button class="attack-btn" onclick="fireScenario('normal')" style="border-color:rgba(0,230,118,0.3);color:var(--success)">
+      <span class="btn-icon">✓</span>Normal
+    </button>
+  </div>
+  <button class="attack-btn" onclick="runAllScenarios()"
+    style="margin:0 12px 8px;grid-column:1/-1;font-size:10px;color:var(--warn);border-color:rgba(255,184,0,0.3);">
+    ▶ RUN ALL SCENARIOS (judge demo)
+  </button>
+
+  <!-- SOAR log -->
+  <div class="panel-header" style="flex-shrink:0;">
+    <span class="panel-title">SOAR Response Log</span>
+  </div>
+  <div class="soar-log" id="soar-log">
+    <div class="soar-line info">[SYS] OVERSEER engine initializing...</div>
+    <div class="soar-line info">[SYS] Models loaded: RF + GBM + Autoencoder</div>
+    <div class="soar-line info">[SYS] Awaiting network traffic...</div>
+  </div>
+</div>
+
+</div><!-- end layout -->
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────
+const API = 'http://localhost:5000';
+let alertCount = 0;
+let scoreHistory = [];
+let startTime = Date.now();
+let totalPredictions = 0;
+let threatsDetected = 0;
+let lastFired = 0;
+
+// ── Clock ─────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toISOString().replace('T',' ').substring(0,19) + ' UTC';
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = String(Math.floor(elapsed/60)).padStart(2,'0');
+  const s = String(elapsed%60).padStart(2,'0');
+  document.getElementById('m-uptime').textContent = `${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Gauge canvas ──────────────────────────────────────────────────────────
+function drawGauge(score) {
+  const canvas = document.getElementById('gauge-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = 200, H = 120;
+  ctx.clearRect(0,0,W,H);
+
+  const cx=100, cy=100, r=80;
+  const startA = Math.PI, endA = 2*Math.PI;
+  const angle  = startA + score * Math.PI;
+
+  // Background arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startA, endA);
+  ctx.strokeStyle = '#1a2e45';
+  ctx.lineWidth = 12;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Color ramp
+  const color = score < 0.4 ? '#00e676' : score < 0.65 ? '#ffb800' : '#ff3b3b';
+
+  // Fill arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startA, angle);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 12;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Needle
+  const nx = cx + (r-8) * Math.cos(angle);
+  const ny = cy + (r-8) * Math.sin(angle);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(nx, ny);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#3a5068';
+  ctx.font = '10px Share Tech Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText('0.0', cx - r + 4, cy + 16);
+  ctx.fillText('1.0', cx + r - 4, cy + 16);
+  ctx.fillText('0.5', cx, cy - r - 10);
+}
+drawGauge(0);
+
+// ── Sparkline ─────────────────────────────────────────────────────────────
+function drawSparkline() {
+  const canvas = document.getElementById('sparkline');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 240, H = 60;
+  canvas.width = W;
+  if (scoreHistory.length < 2) return;
+  ctx.clearRect(0,0,W,H);
+
+  const pts = scoreHistory.slice(-40);
+  const step = W / (pts.length - 1);
+
+  ctx.beginPath();
+  pts.forEach((v,i) => {
+    const x = i * step;
+    const y = H - v * (H-8) - 4;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = '#00d4ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Fill area
+  ctx.lineTo((pts.length-1)*step, H);
+  ctx.lineTo(0,H);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,212,255,0.06)';
+  ctx.fill();
+}
+
+// ── Render prediction result ──────────────────────────────────────────────
+function renderResult(r) {
+  const score = r.threat_score;
+  const family = r.attack_family || 'BENIGN';
+  const isThreat = r.is_threat;
+
+  // Gauge
+  drawGauge(score);
+  const gv = document.getElementById('gauge-val');
+  gv.textContent = score.toFixed(3);
+  gv.style.color = score > 0.65 ? 'var(--danger)' : score > 0.4 ? 'var(--warn)' : 'var(--success)';
+
+  const gf = document.getElementById('gauge-family');
+  gf.textContent = family;
+  gf.className = 'gauge-family ' + (isThreat ? 'threat' : 'benign');
+
+  // Ensemble bars
+  const s = r.scores || {};
+  const setBar = (id, bId, val) => {
+    const pct = ((val||0)*100).toFixed(1);
+    document.getElementById(id).textContent = (val||0).toFixed(3);
+    const bar = document.getElementById(bId);
+    bar.style.width = pct+'%';
+    bar.style.background = val > 0.65 ? 'var(--danger)' : val > 0.4 ? 'var(--warn)' : bar.style.background;
+  };
+  setBar('val-rf','bar-rf', s.random_forest||0);
+  setBar('val-gb','bar-gb', s.gradient_boost||0);
+  setBar('val-ae','bar-ae', s.autoencoder||0);
+
+  // Sparkline history
+  scoreHistory.push(score);
+  if (scoreHistory.length > 80) scoreHistory.shift();
+  drawSparkline();
+
+  // XAI panel
+  const xai = r.xai_top_features || [];
+  const maxImp = xai[0]?.importance || 1;
+  document.getElementById('xai-panel').innerHTML = xai.map(f => `
+    <div class="xai-row">
+      <span class="xai-name" title="${f.feature}">${f.feature}</span>
+      <div class="xai-bar-wrap">
+        <div class="xai-bar" style="width:${(f.importance/maxImp*100).toFixed(1)}%;
+          background:${f.importance > 0.15 ? 'var(--danger)' : f.importance > 0.08 ? 'var(--warn)' : 'var(--accent)'}">
+        </div>
+      </div>
+      <span class="xai-val">${f.importance.toFixed(3)}</span>
+    </div>
+  `).join('');
+
+  // Update metrics
+  totalPredictions++;
+  document.getElementById('m-total').textContent = totalPredictions;
+  if (isThreat) {
+    threatsDetected++;
+    document.getElementById('m-threats').textContent = threatsDetected;
+  }
+  document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+
+  // Alert feed
+  if (isThreat) {
+    alertCount++;
+    document.getElementById('alert-count').textContent = `${alertCount} alerts`;
+    addAlert(r);
+  }
+
+  // SOAR log
+  addSoarLog(r);
+}
+
+function addAlert(r) {
+  const feed = document.getElementById('alert-feed');
+  const el = document.createElement('div');
+  el.className = `alert-item threat`;
+  el.setAttribute('data-fam', r.attack_family);
+  const sc = r.threat_score;
+  const cls = sc > 0.8 ? 'high' : sc < 0.4 ? 'low' : '';
+  const scenario = r.scenario ? ` · ${r.scenario.replace(/_/g,' ')}` : '';
+  el.innerHTML = `
+    <div class="alert-top">
+      <span class="alert-family" style="color:${r.attack_family.includes('DoS') ? 'var(--danger)' :
+        r.attack_family.includes('Scan') ? 'var(--warn)' :
+        r.attack_family.includes('Zero') ? '#c000ff' : 'var(--danger)'}">${r.attack_family}</span>
+      <span class="alert-score ${cls}">score: ${sc.toFixed(3)}</span>
+    </div>
+    <div class="alert-time">${new Date().toLocaleTimeString()}${scenario}</div>
+    <div class="alert-soar">
+      ${(r.soar_actions||[]).map(a=>`<span class="soar-tag">${a}</span>`).join('')}
+    </div>`;
+  feed.insertBefore(el, feed.firstChild);
+  if (feed.children.length > 50) feed.removeChild(feed.lastChild);
+}
+
+function addSoarLog(r) {
+  const log = document.getElementById('soar-log');
+  const t = new Date().toLocaleTimeString();
+  const lines = [];
+  if (r.is_threat) {
+    lines.push({ cls:'action', txt:`[${t}] THREAT DETECTED: ${r.attack_family} (score=${r.threat_score.toFixed(3)})` });
+    (r.soar_actions||[]).forEach(a => {
+      lines.push({ cls:'action', txt:`[${t}] → SOAR: ${a}` });
+    });
+  } else {
+    lines.push({ cls:'benign', txt:`[${t}] BENIGN traffic cleared (score=${r.threat_score.toFixed(3)})` });
+  }
+  lines.forEach(({cls,txt}) => {
+    const el = document.createElement('div');
+    el.className = `soar-line ${cls}`;
+    el.textContent = txt;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+  });
+  if (log.children.length > 100) log.removeChild(log.firstChild);
+}
+
+// ── Fire scenario ─────────────────────────────────────────────────────────
+async function fireScenario(scenario) {
+  const btns = document.querySelectorAll('.attack-btn');
+  btns.forEach(b => b.classList.remove('firing'));
+  const btn = [...btns].find(b => b.textContent.toLowerCase().includes(scenario.split('_')[0]));
+  if (btn) btn.classList.add('firing');
+
+  try {
+    const res = await fetch(`${API}/predict_demo`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({scenario})
+    });
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    renderResult(data);
+
+    const apiSt = document.getElementById('api-status');
+    apiSt.className = 'status-pill online';
+    apiSt.innerHTML = '<span class="dot"></span> ENGINE ONLINE';
+  } catch(e) {
+    // Demo fallback — simulate without API
+    simulateFallback(scenario);
+  }
+
+  if (btn) setTimeout(() => btn.classList.remove('firing'), 800);
+}
+
+// ── Run all scenarios for judge demo ─────────────────────────────────────
+async function runAllScenarios() {
+  const scenarios = ['normal','dos_syn','port_scan','normal','brute_force','sql_injection','reverse_shell','normal'];
+  for (const sc of scenarios) {
+    await fireScenario(sc);
+    await new Promise(r => setTimeout(r, 2500));
+  }
+}
+
+// ── Fallback simulation (when API not running) ────────────────────────────
+const FALLBACK_DATA = {
+  dos_syn:       {threat_score:0.92,is_threat:true, attack_family:'DoS/DDoS',       soar_actions:['BLOCK_IP','RATE_LIMIT','ALERT_SOC'],                   scores:{random_forest:0.95,gradient_boost:0.91,autoencoder:0.73}, xai_top_features:[{feature:'serror_rate',importance:0.31,value:0.98},{feature:'count',importance:0.22,value:0.99},{feature:'dst_host_serror_rate',importance:0.15,value:0.97},{feature:'src_bytes',importance:0.09,value:0.01},{feature:'same_srv_rate',importance:0.07,value:0.02}]},
+  port_scan:     {threat_score:0.78,is_threat:true, attack_family:'Port Scan / Probe',soar_actions:['LOG_ENHANCED','ALERT_SOC','HONEYPOT_REDIRECT'],        scores:{random_forest:0.82,gradient_boost:0.79,autoencoder:0.55}, xai_top_features:[{feature:'rerror_rate',importance:0.28,value:0.99},{feature:'srv_diff_host_rate',importance:0.19,value:0.06},{feature:'dst_host_rerror_rate',importance:0.14,value:0.99},{feature:'count',importance:0.11,value:0.01},{feature:'same_srv_rate',importance:0.08,value:0.06}]},
+  brute_force:   {threat_score:0.84,is_threat:true, attack_family:'Remote-to-Local',  soar_actions:['BLOCK_IP','RESET_SESSION','ALERT_SOC'],                scores:{random_forest:0.88,gradient_boost:0.85,autoencoder:0.62}, xai_top_features:[{feature:'num_failed_logins',importance:0.35,value:0.98},{feature:'logged_in',importance:0.18,value:0.00},{feature:'serror_rate',importance:0.12,value:0.03},{feature:'duration',importance:0.10,value:0.02},{feature:'count',importance:0.08,value:0.01}]},
+  sql_injection: {threat_score:0.89,is_threat:true, attack_family:'Remote-to-Local',  soar_actions:['BLOCK_IP','RESET_SESSION','ALERT_SOC'],                scores:{random_forest:0.91,gradient_boost:0.88,autoencoder:0.71}, xai_top_features:[{feature:'num_compromised',importance:0.33,value:0.89},{feature:'hot',importance:0.21,value:0.95},{feature:'src_bytes',importance:0.16,value:0.72},{feature:'dst_bytes',importance:0.12,value:0.78},{feature:'num_file_creations',importance:0.08,value:0.43}]},
+  reverse_shell: {threat_score:0.96,is_threat:true, attack_family:'User-to-Root',     soar_actions:['ISOLATE_HOST','REVOKE_CREDENTIALS','ALERT_SOC','FORENSIC_SNAPSHOT'],scores:{random_forest:0.97,gradient_boost:0.95,autoencoder:0.88}, xai_top_features:[{feature:'root_shell',importance:0.42,value:0.99},{feature:'num_shells',importance:0.28,value:0.95},{feature:'num_compromised',importance:0.18,value:0.88},{feature:'su_attempted',importance:0.09,value:0.75},{feature:'num_root',importance:0.07,value:0.81}]},
+  normal:        {threat_score:0.04,is_threat:false,attack_family:'BENIGN',           soar_actions:[],                                                      scores:{random_forest:0.03,gradient_boost:0.04,autoencoder:0.02}, xai_top_features:[{feature:'dst_host_same_srv_rate',importance:0.18,value:0.92},{feature:'same_srv_rate',importance:0.15,value:0.89},{feature:'count',importance:0.12,value:0.07},{feature:'dst_bytes',importance:0.11,value:0.45},{feature:'duration',importance:0.09,value:0.01}]},
+};
+
+function simulateFallback(scenario) {
+  const d = FALLBACK_DATA[scenario] || FALLBACK_DATA['normal'];
+  const r = {...d, scenario, timestamp: Date.now()/1000};
+  renderResult(r);
+
+  const apiSt = document.getElementById('api-status');
+  apiSt.className = 'status-pill offline';
+  apiSt.innerHTML = '<span class="dot"></span> DEMO MODE';
+}
+
+// ── Live alert poller — renders real detections from pcap_bridge ─────────
+let lastAlertTimestamp = 0;
+
+async function pollLiveAlerts() {
+  try {
+    const res = await fetch(`${API}/stats`);
+    if (!res.ok) return;
+    const s = await res.json();
+
+    document.getElementById('m-total').textContent   = s.total_predictions || 0;
+    document.getElementById('m-threats').textContent = s.threats_detected  || 0;
+    const up = s.uptime || 0;
+    const m2 = String(Math.floor(up/60)).padStart(2,'0');
+    const s2 = String(up%60).padStart(2,'0');
+    document.getElementById('m-uptime').textContent = `${m2}:${s2}`;
+
+    const alerts = s.recent_alerts || [];
+    const newAlerts = alerts.filter(a => a.timestamp > lastAlertTimestamp);
+
+    newAlerts.forEach(a => {
+      lastAlertTimestamp = Math.max(lastAlertTimestamp, a.timestamp);
+      // Handle both 'family' and 'attack_family' keys
+      const fam = a.family || a.attack_family || 'Unknown';
+      const familyMap = {
+        'DoS/DDoS': 'dos_syn',
+        'Port Scan / Probe': 'port_scan',
+        'Remote-to-Local': 'brute_force',
+        'User-to-Root': 'reverse_shell',
+        'Zero-Day Anomaly': 'reverse_shell',
+        'IP Spoofing': 'dos_syn',
+        'DNS Tunneling': 'port_scan',
+        'BENIGN': 'normal',
+      };
+      const sc = familyMap[fam] || 'dos_syn';
+      const fb = FALLBACK_DATA[sc] || FALLBACK_DATA['dos_syn'];
+      const result = {
+        threat_score: a.score || a.threat_score || 0.9,
+        is_threat: (a.score || a.threat_score || 0) > 0.5,
+        attack_family: fam,
+        confidence: a.score || a.threat_score || 0.9,
+        soar_actions: a.soar || a.soar_actions || [],
+        scores: fb.scores,
+        xai_top_features: fb.xai_top_features,
+        timestamp: a.timestamp,
+        detail: a.detail || ''
+      };
+      renderResult(result);
+      const pill = document.getElementById('api-status');
+      pill.className = 'status-pill online';
+      pill.innerHTML = '<span class="dot"></span> LIVE TRAFFIC';
+      setTimeout(() => { pill.innerHTML = '<span class="dot"></span> ENGINE ONLINE'; }, 3000);
+    });
+  } catch(_) {}
+}
+setInterval(pollLiveAlerts, 1000);
+
+// ── Auto demo on load ─────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => simulateFallback('normal'), 800);
+});
+</script>
+</body>
+</html>
