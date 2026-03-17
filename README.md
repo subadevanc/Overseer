@@ -16,40 +16,46 @@ movement analysis, concept drift adaptation, and real-time global threat intelli
 ## Project Structure
 
 ```
-overseer/
-├── main.py                          # Pipeline orchestrator — entry point
-├── requirements.txt
+Overseer/
+├── overseer_engine.py               # Core AI detection engine — REST API server
+│                                    #   · Trains ensemble: Random Forest + Gradient Boost + Autoencoder
+│                                    #   · Exposes /predict, /predict_demo, /stats, /health endpoints
+│                                    #   · XAI: top-10 feature importance per prediction
+│                                    #   · SOAR: automated response actions on high-confidence threats
 │
-├── config/
-│   └── settings.py                  # All thresholds, weights, API keys, DSNs
+├── overseer_dashboard.html          # Real-time browser dashboard (zero dependencies)
+│                                    #   · Live threat feed, attack family breakdown, SOAR action log
+│                                    #   · Polls overseer_engine REST API every 2 s
 │
-├── core/
-│   ├── models.py                    # Shared typed dataclasses & enums
-│   ├── ingestion.py                 # Packet capture + feature extraction
-│   └── risk_scoring.py              # Weighted signal aggregation engine
+├── parrot_bridge.py                 # Live traffic sensor for Parrot OS (attacker VM)
+│                                    #   · Scapy packet sniffer on enp0s3 (host-only network)
+│                                    #   · Detects: Port Scan, DoS/DDoS, Brute Force,
+│                                    #     Root Shell, IP Spoofing, DNS Tunneling
+│                                    #   · Real iptables blocking on detection (SOAR)
+│                                    #   · Forwards scored flows to overseer_engine via /predict
 │
-├── detection/
-│   ├── anomaly_detector.py          # Keras autoencoder (sklearn fallback)
-│   ├── drift_detector.py            # ADWIN + auto-retraining manager
-│   └── graph_analyzer.py            # Dynamic attack graph + centrality
+├── pcap_bridge.py                   # Live traffic sensor for Windows host
+│                                    #   · Scapy/WinPcap sniffer (hardcoded VirtualBox NIC GUID)
+│                                    #   · Mirrors Parrot → Metasploitable traffic
+│                                    #   · Forwards KDD99-compatible feature vectors to /predict
 │
-├── intelligence/
-│   └── threat_intel.py              # VirusTotal / AbuseIPDB / OTX / GreyNoise
+├── find_iface.py                    # Windows utility — lists all WinPcap interfaces
+│                                    #   · Run once to find the correct GUID for pcap_bridge.py
 │
-├── containment/
-│   └── containment_engine.py        # iptables / nftables automated response
+├── attack_scripts.sh                # Attack simulation suite (run on Parrot OS)
+│                                    #   · Scenarios: dos · scan · brute · sqli · shell · all
+│                                    #   · Tools: nmap, hping3, hydra, sqlmap, netcat, Metasploit
 │
-├── storage/
-│   └── storage_layer.py             # Elasticsearch / Neo4j / PostgreSQL / Redis
+├── overseer_setup.sh                # One-shot environment setup script
+│                                    #   · Installs Python deps + attack tools via apt
+│                                    #   · Auto-detects host-only NIC, starts tcpdump capture
 │
-├── dashboard/
-│   └── app.py                       # Streamlit real-time security dashboard
+├── kdd99_10percent.csv              # KDD Cup 99 dataset (10 % subset, ~494 K records)
+│                                    #   · Training data for the ensemble models
+│                                    #   · Auto-generated synthetically if download fails
 │
-├── tests/
-│   └── test_pipeline.py             # 30 unit tests (pytest)
-│
-├── models/                          # Saved model checkpoints (auto-created)
-└── logs/                            # Rotating log files (auto-created)
+└── overseer_models.pkl              # Serialised trained models (auto-created by --train)
+                                     #   · Contains: RF, GB, Autoencoder, family classifier, scaler
 ```
 
 ---
